@@ -1,69 +1,108 @@
-// src/models/Himpunan.js
+const { DataTypes } = require('sequelize');
+
 module.exports = (sequelize) => {
   const Himpunan = sequelize.define('Himpunan', {
     id: {
-      type: sequelize.Sequelize.INTEGER,
+      type: DataTypes.INTEGER,
       autoIncrement: true,
       primaryKey: true,
-      allowNull: true // Tambahkan ini untuk memastikan
+      allowNull: false
     },
     name: {
-      type: sequelize.Sequelize.STRING,
+      type: DataTypes.STRING,
       allowNull: false,
       validate: {
         notEmpty: true
-      }
+      },
+      unique: true
     },
     aka: {
-      type: sequelize.Sequelize.STRING,
+      type: DataTypes.STRING,
       allowNull: false,
       validate: {
         notEmpty: true
+      },
+      unique: true
+    },
+    description: DataTypes.TEXT,
+    logo: DataTypes.STRING,
+    foundedDate: DataTypes.DATEONLY,
+    status: {
+      type: DataTypes.STRING,
+      defaultValue: 'active',
+      validate: {
+        isIn: [
+          ['active', 'inactive', 'suspended']
+        ]
       }
     },
-    description: {
-      type: sequelize.Sequelize.TEXT,
-      allowNull: true
-    },
-    logo: {
-      type: sequelize.Sequelize.STRING,
-      allowNull: true
-    },
-    foundedDate: {
-      type: sequelize.Sequelize.DATEONLY,
-      allowNull: true
-    },
-    status: {
-      type: sequelize.Sequelize.ENUM('active', 'inactive', 'suspended'),
-      defaultValue: 'active'
-    },
     contactEmail: {
-      type: sequelize.Sequelize.STRING,
-      allowNull: true,
+      type: DataTypes.STRING,
       validate: {
         isEmail: true
       }
     },
-    contactPhone: {
-      type: sequelize.Sequelize.STRING,
-      allowNull: true
+    contactPhone: DataTypes.STRING,
+    address: DataTypes.TEXT,
+    totalMembers: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0
     },
-    address: {
-      type: sequelize.Sequelize.TEXT,
-      allowNull: true
+    totalActivities: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0
     },
-    adminId: {
-      type: sequelize.Sequelize.INTEGER,
-      allowNull: null // Pastikan ini tidak null
+    totalTasks: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0
+    },
+    createdById: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: 'Users',
+        key: 'id'
+      }
     }
   }, {
-    indexes: [
-      {
-        unique: true,
-        fields: ['name']
+    hooks: {
+      afterCreate: async (himpunan) => {
+        await himpunan.updateTotalMembers();
+      },
+      afterUpdate: async (himpunan) => {
+        await himpunan.updateTotalMembers();
+      },
+      afterDestroy: async (himpunan) => {
+        await himpunan.updateTotalMembers();
       }
+    },
+    indexes: [
+      { fields: ['name'] },
+      { fields: ['aka'] },
+      { fields: ['status'] }
     ]
   });
+
+  // Method untuk menghitung jumlah anggota
+  Himpunan.prototype.countMembers = async function() {
+    const User = this.sequelize.models.User; // Akses model User melalui sequelize
+    return await User.count({
+      where: {
+        himpunanId: this.id
+      }
+    });
+  };
+
+  // Method untuk memperbarui total anggota
+  Himpunan.prototype.updateTotalMembers = async function() {
+    try {
+      const count = await this.countMembers();
+      this.totalMembers = count;
+      await this.save();
+    } catch (error) {
+      console.error('Error updating totalMembers:', error);
+    }
+  };
 
   return Himpunan;
 };

@@ -1,21 +1,30 @@
 // src/controllers/taskController.js
-const { Task, User, Himpunan } = require('../models');
-const { formatResponse } = require('../../utils/helpers');
+const {
+  Task,
+  User,
+  Himpunan
+} = require('../models');
+const {
+  formatResponse
+} = require('../../utils/helpers');
 
 // Get all tasks
 exports.getAllTasks = async (req, res, next) => {
   try {
-    const { himpunanId, status, priority } = req.query;
+    const {
+      himpunanId,
+      status,
+      priority
+    } = req.query;
     const where = {};
-    
+
     if (himpunanId) where.himpunanId = himpunanId;
     if (status) where.status = status;
     if (priority) where.priority = priority;
-    
+
     const tasks = await Task.findAll({
       where,
-      include: [
-        {
+      include: [{
           model: User,
           as: 'assignedTo',
           attributes: ['id', 'fullName', 'email']
@@ -53,8 +62,10 @@ exports.getAllTasks = async (req, res, next) => {
 // Get himpunan tasks
 exports.getHimpunanTasks = async (req, res, next) => {
   try {
-    const { himpunanId } = req.params;
-    
+    const {
+      himpunanId
+    } = req.params;
+
     // Check if himpunan exists
     const himpunan = await Himpunan.findByPk(himpunanId);
     if (!himpunan) {
@@ -63,11 +74,12 @@ exports.getHimpunanTasks = async (req, res, next) => {
         'Himpunan tidak ditemukan'
       ));
     }
-    
+
     const tasks = await Task.findAll({
-      where: { himpunanId },
-      include: [
-        {
+      where: {
+        himpunanId
+      },
+      include: [{
           model: User,
           as: 'assignedTo',
           attributes: ['id', 'fullName', 'email']
@@ -101,8 +113,7 @@ exports.getHimpunanTasks = async (req, res, next) => {
 exports.getTask = async (req, res, next) => {
   try {
     const task = await Task.findByPk(req.params.id, {
-      include: [
-        {
+      include: [{
           model: User,
           as: 'assignedTo',
           attributes: ['id', 'fullName', 'email']
@@ -202,8 +213,7 @@ exports.createTask = async (req, res, next) => {
     });
 
     const createdTask = await Task.findByPk(task.id, {
-      include: [
-        {
+      include: [{
           model: User,
           as: 'assignedTo',
           attributes: ['id', 'fullName', 'email']
@@ -216,7 +226,7 @@ exports.createTask = async (req, res, next) => {
         {
           model: Himpunan,
           as: 'himpunan',
-          attributes: ['id', 'name',]
+          attributes: ['id', 'name', ]
         }
       ]
     });
@@ -274,7 +284,7 @@ exports.updateTask = async (req, res, next) => {
     const isAdmin = req.user.role === 'admin';
     const isCreator = task.createdById === req.user.id;
     const isAssignee = task.assignedToId === req.user.id;
-    
+
     if (!isSuperAdmin && !isAdmin && !isCreator && !isAssignee) {
       return res.status(403).json(formatResponse(
         false,
@@ -308,8 +318,7 @@ exports.updateTask = async (req, res, next) => {
     });
 
     const updatedTask = await Task.findByPk(task.id, {
-      include: [
-        {
+      include: [{
           model: User,
           as: 'assignedTo',
           attributes: ['id', 'fullName', 'email']
@@ -353,7 +362,7 @@ exports.deleteTask = async (req, res, next) => {
     const isSuperAdmin = req.user.role === 'super_admin';
     const isAdmin = req.user.role === 'admin';
     const isCreator = task.createdById === req.user.id;
-    
+
     if (!isSuperAdmin && !isAdmin && !isCreator) {
       return res.status(403).json(formatResponse(
         false,
@@ -374,15 +383,66 @@ exports.deleteTask = async (req, res, next) => {
   }
 };
 
+// Tambahkan fungsi completeTask
+exports.completeTask = async (req, res) => {
+  try {
+    const taskId = req.params.id;
+    const userId = req.user.id;
+    
+    const task = await Task.findByPk(taskId);
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
+    }
+
+    // Cek apakah user adalah assignee
+    if (task.assignedToId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not assigned to this task'
+      });
+    }
+
+    // Update task status
+    await task.update({
+      status: 'completed',
+      completionDate: new Date()
+    });
+
+    // Update user score
+    if (task.scoreReward > 0) {
+      const user = await User.findByPk(userId);
+      await user.update({
+        score: user.score + task.scoreReward
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Task marked as completed',
+      data: task
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to complete task',
+      error: error.message
+    });
+  }
+};
+
 // Get tasks assigned to user
 exports.getUserTasks = async (req, res, next) => {
   try {
     const userId = req.params.userId || req.user.id;
-    
+
     const tasks = await Task.findAll({
-      where: { assignedToId: userId },
-      include: [
-        {
+      where: {
+        assignedToId: userId
+      },
+      include: [{
           model: User,
           as: 'createdBy',
           attributes: ['id', 'fullName', 'email']
@@ -412,39 +472,75 @@ exports.getUserTasks = async (req, res, next) => {
   }
 };
 
-exports.getCurrentUserTasks = async (req, res, next) => {
+exports.takeTask = async (req, res) => {
   try {
-    const userId = req.user.id; // Gunakan user yang sedang login
-    
-    const tasks = await Task.findAll({
-      where: { assignedToId: userId },
-      include: [
-        {
-          model: User,
-          as: 'createdBy',
-          attributes: ['id', 'fullName', 'email']
-        },
-        {
-          model: Himpunan,
-          as: 'himpunan',
-          attributes: ['id', 'name', 'aka']
-        }
-      ],
-      order: [
-        ['createdAt', 'DESC']
-      ]
+    const taskId = req.params.id;
+    const userId = req.user.id;
+    // Temukan tugas berdasarkan ID
+    const task = await Task.findByPk(taskId);
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: 'Task not found'
+      });
+    }
+    // Cek apakah tugas sudah diambil
+    if (task.assignedToId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Task has already been taken'
+      });
+    }
+    // Ambil tugas
+    task.assignedToId = userId;
+    await task.save();
+    res.status(200).json({
+      success: true,
+      message: 'Task taken successfully',
+      data: task
     });
-
-    res.status(200).json(formatResponse(
-      true,
-      'Tasks user saat ini berhasil diambil',
-      tasks
-    ));
   } catch (error) {
-    console.error('Error in getCurrentUserTasks:', error);
-    res.status(500).json(formatResponse(
-      false,
-      error.message || 'Terjadi kesalahan saat mengambil data tasks user'
-    ));
+    res.status(500).json({
+      success: false,
+      message: 'Failed to take task',
+      error: error.message
+    });
   }
 };
+
+// exports.getCurrentUserTasks = async (req, res, next) => {
+//   try {
+//     const userId = req.user.id; // Gunakan user yang sedang login
+
+//     const tasks = await Task.findAll({
+//       where: { assignedToId: userId },
+//       include: [
+//         {
+//           model: User,
+//           as: 'createdBy',
+//           attributes: ['id', 'fullName', 'email']
+//         },
+//         {
+//           model: Himpunan,
+//           as: 'himpunan',
+//           attributes: ['id', 'name', 'aka']
+//         }
+//       ],
+//       order: [
+//         ['createdAt', 'DESC']
+//       ]
+//     });
+
+//     res.status(200).json(formatResponse(
+//       true,
+//       'Tasks user saat ini berhasil diambil',
+//       tasks
+//     ));
+//   } catch (error) {
+//     console.error('Error in getCurrentUserTasks:', error);
+//     res.status(500).json(formatResponse(
+//       false,
+//       error.message || 'Terjadi kesalahan saat mengambil data tasks user'
+//     ));
+//   }
+// };

@@ -5,38 +5,34 @@ const userController = require('../controllers/userController');
 const { auth, authorize } = require('../middleware/authMiddleware');
 
 // Public routes
-router.post('/', userController.registerUser);
+router.post('/register', userController.registerUser);
 router.post('/login', userController.loginUser);
-router.post('/forgot-password', userController.forgotPassword);
-router.post('/reset-password', userController.resetPassword);
+router.post('/password/forgot', userController.forgotPassword);
+router.post('/password/reset/:token', userController.resetPassword);
 
-// Protected routes
-router.get('/profile', auth, userController.getUserProfile);
-router.put('/profile', auth, userController.updateUserProfile);
+// Middleware auth untuk semua route di bawah ini
+router.use(auth);
 
-// Admin only routes
-router.get('/', auth, authorize('super_admin', 'admin'), userController.getAllUsers);
-router.get('/:id', auth, authorize('super_admin', 'admin'), userController.getUserById);
-router.put('/:id', auth, authorize('super_admin', 'admin'), userController.updateUser);
-router.delete('/:id', auth, authorize('super_admin', 'admin'), userController.deleteUser);
+// Authenticated user routes
+router.get('/me', userController.getUserProfile);
+router.put('/me', userController.updateUserProfile); // Pastikan ini adalah fungsi yang valid
+router.put('/password', userController.changePassword);
+router.get('/membership', userController.getMyMembership);
 
-// Route untuk mendapatkan user berdasarkan himpunan
-router.get('/himpunan/:himpunanId', auth, authorize('super_admin', 'admin'), userController.getUsersByHimpunan);
+// Admin routes (hanya untuk admin dan super_admin)
+router.use(authorize('super_admin', 'admin'));
 
-// Route untuk update skor user - gunakan put daripada patch untuk kompatibilitas lebih baik
-router.put('/:userId/score', auth, authorize('super_admin', 'admin'), userController.updateUserScore);
+router.get('/', userController.getAllUsers);
+router.get('/himpunan/:himpunanId', userController.getUsersByHimpunan);
+router.get('/:id', userController.getUserById);
+router.put('/:id', userController.updateUser);
+router.put('/:id/score', userController.updateUserScore);
+router.delete('/:id', userController.deleteUser);
+router.put('/:id/membership/status', userController.updateMembershipStatus);
+router.delete('/:id/membership', userController.removeMember);
 
-// Membership routes
-router.post('/join-himpunan', auth, userController.joinHimpunan);
-router.delete('/leave-himpunan', auth, userController.leaveHimpunan);
-router.get('/my-membership', auth, userController.getMyMembership);
-
-// Admin membership management
-router.put('/:userId/membership-status', auth, authorize('super_admin', 'admin'), userController.updateMembershipStatus);
-router.delete('/:userId/remove-member', auth, authorize('super_admin', 'admin'), userController.removeMember);
-
-// ATAU gunakan router.route() untuk HTTP methods
-// router.route('/:userId/score')
-//   .put(auth, authorize('super_admin', 'admin'), userController.updateUserScore);
+// Endpoint khusus super_admin
+router.get('/admins', authorize('super_admin'), userController.getAllAdmins);
+router.post('/debug-admin', userController.debugCreateAdmin);
 
 module.exports = router;

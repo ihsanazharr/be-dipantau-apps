@@ -1,21 +1,40 @@
 const jwt = require('jsonwebtoken');
-const { User, Himpunan } = require('../models');
-const { Op } = require('sequelize');
+const {
+  User,
+  Himpunan
+} = require('../models');
+const {
+  Op
+} = require('sequelize');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const generateToken = (user) => {
-  return jwt.sign(
-    { id: user.id, email: user.email, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: '7d' }
+  return jwt.sign({
+      id: user.id,
+      email: user.email,
+      role: user.role
+    },
+    process.env.JWT_SECRET, {
+      expiresIn: '7d'
+    }
   );
 };
 
 exports.registerUser = async (req, res) => {
   try {
-    const { email, password, fullName, phoneNumber } = req.body;
+    const {
+      email,
+      password,
+      fullName,
+      phoneNumber
+    } = req.body;
 
-    const userExists = await User.findOne({ where: { email } });
+    const userExists = await User.findOne({
+      where: {
+        email
+      }
+    });
     if (userExists) {
       return res.status(400).json({
         success: false,
@@ -34,7 +53,9 @@ exports.registerUser = async (req, res) => {
 
     const token = generateToken(user);
 
-    await user.update({ lastLogin: new Date() });
+    await user.update({
+      lastLogin: new Date()
+    });
 
     res.status(201).json({
       success: true,
@@ -59,9 +80,16 @@ exports.registerUser = async (req, res) => {
 
 exports.loginUser = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const {
+      email,
+      password
+    } = req.body;
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({
+      where: {
+        email
+      }
+    });
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -86,7 +114,9 @@ exports.loginUser = async (req, res) => {
 
     const token = generateToken(user);
 
-    await user.update({ lastLogin: new Date() });
+    await user.update({
+      lastLogin: new Date()
+    });
 
     res.status(200).json({
       success: true,
@@ -114,7 +144,9 @@ exports.loginUser = async (req, res) => {
 exports.getUserProfile = async (req, res) => {
   try {
     const user = await User.findByPk(req.user.id, {
-      attributes: { exclude: ['password', 'resetPasswordToken', 'resetPasswordExpire'] }
+      attributes: {
+        exclude: ['password', 'resetPasswordToken', 'resetPasswordExpire']
+      }
     });
 
     if (!user) {
@@ -142,7 +174,17 @@ exports.getUserProfile = async (req, res) => {
 // @access  Private
 exports.updateUserProfile = async (req, res) => {
   try {
-    const { fullName, phoneNumber, username, profilePicture } = req.body;
+    const {
+      fullName,
+      phoneNumber,
+      username,
+      profilePicture,
+      position,
+      isHimpunanAdmin,
+      himpunanRole,
+      membershipStatus
+    } = req.body;
+
     const user = await User.findByPk(req.user.id);
 
     if (!user) {
@@ -152,11 +194,19 @@ exports.updateUserProfile = async (req, res) => {
       });
     }
 
-    // Update user fields
-    user.fullName = fullName || user.fullName;
-    user.phoneNumber = phoneNumber || user.phoneNumber;
-    user.username = username || user.username;
-    user.profilePicture = profilePicture || user.profilePicture;
+    // Update fields yang diizinkan untuk user biasa
+    if (fullName) user.fullName = fullName;
+    if (phoneNumber) user.phoneNumber = phoneNumber;
+    if (username) user.username = username;
+    if (profilePicture) user.profilePicture = profilePicture;
+
+    // Update fields khusus admin (hanya untuk super_admin)
+    if (req.user.role === 'super_admin') {
+      if (position !== undefined) user.position = position;
+      if (isHimpunanAdmin !== undefined) user.isHimpunanAdmin = isHimpunanAdmin;
+      if (himpunanRole !== undefined) user.himpunanRole = himpunanRole;
+      if (membershipStatus !== undefined) user.membershipStatus = membershipStatus;
+    }
 
     await user.save();
 
@@ -167,9 +217,11 @@ exports.updateUserProfile = async (req, res) => {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
-        username: user.username,
         phoneNumber: user.phoneNumber,
-        profilePicture: user.profilePicture
+        username: user.username,
+        profilePicture: user.profilePicture,
+        position: user.position,
+        isHimpunanAdmin: user.isHimpunanAdmin
       }
     });
   } catch (error) {
@@ -186,8 +238,14 @@ exports.updateUserProfile = async (req, res) => {
 // @access  Public
 exports.forgotPassword = async (req, res) => {
   try {
-    const { email } = req.body;
-    const user = await User.findOne({ where: { email } });
+    const {
+      email
+    } = req.body;
+    const user = await User.findOne({
+      where: {
+        email
+      }
+    });
 
     if (!user) {
       return res.status(404).json({
@@ -226,12 +284,17 @@ exports.forgotPassword = async (req, res) => {
 // @access  Public
 exports.resetPassword = async (req, res) => {
   try {
-    const { token, password } = req.body;
+    const {
+      token,
+      password
+    } = req.body;
 
     const user = await User.findOne({
       where: {
         resetPasswordToken: token,
-        resetPasswordExpire: { [Op.gt]: Date.now() }
+        resetPasswordExpire: {
+          [Op.gt]: Date.now()
+        }
       }
     });
 
@@ -272,16 +335,34 @@ exports.getAllUsers = async (req, res) => {
     const offset = (page - 1) * limit;
     const search = req.query.search || '';
 
-    const { count, rows } = await User.findAndCountAll({
+    const {
+      count,
+      rows
+    } = await User.findAndCountAll({
       where: {
-        [Op.or]: [
-          { fullName: { [Op.iLike]: `%${search}%` } },
-          { email: { [Op.iLike]: `%${search}%` } },
-          { username: { [Op.iLike]: `%${search}%` } }
+        [Op.or]: [{
+            fullName: {
+              [Op.iLike]: `%${search}%`
+            }
+          },
+          {
+            email: {
+              [Op.iLike]: `%${search}%`
+            }
+          },
+          {
+            username: {
+              [Op.iLike]: `%${search}%`
+            }
+          }
         ]
       },
-      attributes: { exclude: ['password', 'resetPasswordToken', 'resetPasswordExpire'] },
-      order: [['createdAt', 'DESC']],
+      attributes: {
+        exclude: ['password', 'resetPasswordToken', 'resetPasswordExpire']
+      },
+      order: [
+        ['createdAt', 'DESC']
+      ],
       limit,
       offset
     });
@@ -308,7 +389,9 @@ exports.getAllUsers = async (req, res) => {
 exports.getUserById = async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id, {
-      attributes: { exclude: ['password', 'resetPasswordToken', 'resetPasswordExpire'] }
+      attributes: {
+        exclude: ['password', 'resetPasswordToken', 'resetPasswordExpire']
+      }
     });
 
     if (!user) {
@@ -336,7 +419,14 @@ exports.getUserById = async (req, res) => {
 // @access  Private/Admin
 exports.updateUser = async (req, res) => {
   try {
-    const { fullName, email, role, isActive, phoneNumber, username } = req.body;
+    const {
+      fullName,
+      email,
+      role,
+      isActive,
+      phoneNumber,
+      username
+    } = req.body;
     const user = await User.findByPk(req.params.id);
 
     if (!user) {
@@ -405,132 +495,125 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-module.exports = exports;
-
-exports.updateUserScore = async (req, res, next) => {
+exports.updateUserScore = async (req, res) => {
   try {
-    const { userId } = req.params;
-    const { score } = req.body;
-    
-    // Validasi score
-    if (score === undefined || isNaN(score)) {
+    const {
+      userId
+    } = req.params;
+    const {
+      score
+    } = req.body;
+
+    // Validate
+    if (isNaN(score)) {
       return res.status(400).json({
         success: false,
-        message: 'Nilai skor harus berupa angka yang valid'
+        message: 'Invalid score value'
       });
     }
-    
-    // Temukan user
+
     const user = await User.findByPk(userId);
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User tidak ditemukan'
+        message: 'User not found'
       });
     }
-    
-    // Cek apakah admin adalah admin himpunan
-    if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+
+    // Authorization
+    if (req.user.role === 'admin') {
+      const adminHimpunan = await User.findOne({
+        where: {
+          id: req.user.id,
+          isHimpunanAdmin: true
+        }
+      });
+
+      if (!adminHimpunan || user.himpunanId !== adminHimpunan.himpunanId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Unauthorized to modify this user'
+        });
+      }
+    } else if (req.user.role !== 'super_admin') {
       return res.status(403).json({
         success: false,
-        message: 'Tidak memiliki izin untuk mengubah skor user'
+        message: 'Unauthorized'
       });
     }
-    
-    // Jika bukan super_admin, cek apakah user ada dalam himpunan admin
-    if (req.user.role === 'admin') {
-      // Temukan himpunan yang dikelola oleh admin
-      const adminHimpunan = await Himpunan.findOne({
-        where: { adminId: req.user.id }
-      });
-      
-      if (!adminHimpunan) {
-        return res.status(403).json({
-          success: false,
-          message: 'Admin tidak terdaftar sebagai pengelola himpunan manapun'
-        });
-      }
-      
-      // MODIFIKASI: Cek langsung dari user.himpunanId
-      if (user.himpunanId !== adminHimpunan.id) {
-        return res.status(403).json({
-          success: false,
-          message: 'Tidak dapat mengubah skor user yang bukan anggota himpunan Anda'
-        });
-      }
-    }
-    
-    // Update skor user
-    await user.update({ score });
-    
+
+    // Update
+    await user.update({
+      score
+    });
     res.status(200).json({
       success: true,
-      message: 'Skor user berhasil diperbarui',
-      data: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-        score: user.score
-      }
+      data: user
     });
   } catch (error) {
-    console.error('Error in updateUserScore:', error);
     res.status(500).json({
       success: false,
-      message: 'Gagal memperbarui skor user',
-      error: error.message
+      message: 'Server error'
     });
   }
 };
 
 // Fungsi untuk mendapatkan user berdasarkan himpunan - MODIFIKASI
-exports.getUsersByHimpunan = async (req, res, next) => {
+exports.getUsersByHimpunan = async (req, res) => {
   try {
-    const { himpunanId } = req.params;
-    
-    // Cek apakah himpunan ada
-    const himpunan = await Himpunan.findByPk(himpunanId);
-    if (!himpunan) {
-      return res.status(404).json({
-        success: false,
-        message: 'Himpunan tidak ditemukan'
-      });
-    }
-    
-    // Cek apakah user adalah admin dari himpunan ini atau super admin
+    const {
+      himpunanId
+    } = req.params;
+
+    // Authorization
     if (req.user.role === 'admin') {
-      if (himpunan.adminId !== req.user.id) {
+      const isAdmin = await User.findOne({
+        where: {
+          id: req.user.id,
+          himpunanId,
+          isHimpunanAdmin: true
+        }
+      });
+
+      if (!isAdmin) {
         return res.status(403).json({
           success: false,
-          message: 'Anda tidak memiliki akses ke himpunan ini'
+          message: 'Unauthorized access'
         });
       }
+    } else if (req.user.role !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized'
+      });
     }
-    
-    // MODIFIKASI: Dapatkan user langsung berdasarkan himpunanId
+
     const users = await User.findAll({
-      where: { himpunanId },
-      attributes: ['id', 'fullName', 'email', 'score', 'profilePicture', 'membershipStatus', 'joinDate', 'himpunanRole']
+      where: {
+        himpunanId
+      },
+      attributes: {
+        exclude: ['password']
+      }
     });
-    
+
     res.status(200).json({
       success: true,
-      count: users.length,
       data: users
     });
   } catch (error) {
-    console.error('Error in getUsersByHimpunan:', error);
     res.status(500).json({
       success: false,
-      message: 'Gagal mengambil data user himpunan',
-      error: error.message
+      message: 'Server error'
     });
   }
 };
 
 exports.joinHimpunan = async (req, res) => {
   try {
-    const { himpunanId } = req.body;
+    const {
+      himpunanId
+    } = req.body;
     const userId = req.user.id;
 
     // Check if himpunan exists
@@ -576,16 +659,18 @@ exports.joinHimpunan = async (req, res) => {
 // TAMBAH: Fungsi untuk update membership status
 exports.updateMembershipStatus = async (req, res) => {
   try {
-    const { userId } = req.params;
-    const { status } = req.body;
+    const {
+      userId
+    } = req.params;
+    const {
+      status
+    } = req.body;
 
     const user = await User.findByPk(userId, {
-      include: [
-        {
-          model: Himpunan,
-          as: 'himpunan'
-        }
-      ]
+      include: [{
+        model: Himpunan,
+        as: 'himpunan'
+      }]
     });
 
     if (!user || !user.himpunanId) {
@@ -612,7 +697,9 @@ exports.updateMembershipStatus = async (req, res) => {
     }
 
     // Update status
-    await user.update({ membershipStatus: status });
+    await user.update({
+      membershipStatus: status
+    });
 
     res.status(200).json({
       success: true,
@@ -665,15 +752,15 @@ exports.leaveHimpunan = async (req, res) => {
 // TAMBAH: Fungsi untuk remove member (by admin)
 exports.removeMember = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const {
+      userId
+    } = req.params;
 
     const user = await User.findByPk(userId, {
-      include: [
-        {
-          model: Himpunan,
-          as: 'himpunan'
-        }
-      ]
+      include: [{
+        model: Himpunan,
+        as: 'himpunan'
+      }]
     });
 
     if (!user || !user.himpunanId) {
@@ -718,20 +805,18 @@ exports.getMyMembership = async (req, res) => {
     const userId = req.user.id;
 
     const user = await User.findByPk(userId, {
-      include: [
-        {
-          model: Himpunan,
-          as: 'himpunan',
-          include: [
-            {
-              model: User,
-              as: 'admin',
-              attributes: ['id', 'fullName', 'email']
-            }
-          ]
-        }
-      ],
-      attributes: { exclude: ['password', 'resetPasswordToken', 'resetPasswordExpire'] }
+      include: [{
+        model: Himpunan,
+        as: 'himpunan',
+        include: [{
+          model: User,
+          as: 'admin',
+          attributes: ['id', 'fullName', 'email']
+        }]
+      }],
+      attributes: {
+        exclude: ['password', 'resetPasswordToken', 'resetPasswordExpire']
+      }
     });
 
     res.status(200).json({
@@ -746,5 +831,166 @@ exports.getMyMembership = async (req, res) => {
     });
   }
 };
+
+exports.createAdmin = async (req, res, next) => {
+  try {
+    const { name, email, password, position, phoneNumber } = req.body;
+    
+    // Hanya buat admin dasar TANPA himpunanId
+    const admin = await User.create({
+      fullName: name,
+      email,
+      password,
+      role: 'admin',
+      position: position || 'Admin',
+      joinedAt: new Date(),
+      phoneNumber,
+      permissions: {
+        canManageUsers: true,
+        canCreateTasks: true,
+        canCreateActivities: true,
+        canScanQR: true,
+        canManageAttendance: true,
+        canViewReports: true
+      },
+      score: 0
+    });
+
+    // Kirim respons tanpa password
+    const adminData = admin.get({ plain: true });
+    delete adminData.password;
+    
+    res.status(201).json({
+      success: true,
+      message: 'Admin berhasil dibuat. Silakan assign himpunan setelahnya.',
+      data: adminData
+    });
+  } catch (error) {
+    console.error('Error creating admin:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Gagal membuat admin',
+      error: error.message
+    });
+  }
+};
+
+exports.debugCreateAdmin = async (req, res) => {
+  try {
+    // Data hard-coded untuk testing
+    const testData = {
+      fullName: "DEBUG ADMIN",
+      email: "debug@admin.com",
+      password: "debug123",
+      himpunanId: 1,
+      isHimpunanAdmin: true,
+      role: "admin",
+      position: "Debug Position",
+      phoneNumber: "081234567890"
+    };
+
+    // Langsung create tanpa validasi
+    const admin = await User.create(testData);
+
+    // Dapatkan data dari database
+    const dbAdmin = await User.findByPk(admin.id, {
+      raw: true
+    });
+
+    res.status(200).json({
+      success: true,
+      input: testData,
+      database: dbAdmin
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Debug failed",
+      error: error.message,
+      stack: error.stack
+    });
+  }
+};
+
+exports.getAllAdmins = async (req, res) => {
+  try {
+    const admins = await User.findAll({
+      where: {
+        [Op.or]: [{
+            role: 'super_admin'
+          },
+          {
+            isHimpunanAdmin: true
+          }
+        ]
+      },
+      attributes: {
+        exclude: ['password']
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      data: admins
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch admins',
+      error: error.message
+    });
+  }
+};
+
+exports.changePassword = async (req, res) => {
+  try {
+    const {
+      currentPassword,
+      newPassword
+    } = req.body;
+
+    // Pastikan password baru memenuhi kriteria (minimal 6 karakter, dll)
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password baru harus memiliki minimal 6 karakter'
+      });
+    }
+
+    const user = await User.findByPk(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User tidak ditemukan'
+      });
+    }
+
+    // Validasi password lama
+    const isMatch = await user.validPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Password lama tidak cocok'
+      });
+    }
+
+    // Update password baru (hashing dilakukan di hook model)
+    user.password = newPassword;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password berhasil diperbarui'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Gagal mengubah password',
+      error: error.message
+    });
+  }
+};
+
 
 module.exports = exports;

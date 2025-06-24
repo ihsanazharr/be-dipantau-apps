@@ -1,4 +1,4 @@
-// src/models/User.js
+// models/User.js
 const { DataTypes } = require('sequelize');
 const bcrypt = require('bcryptjs');
 
@@ -34,15 +34,39 @@ module.exports = (sequelize) => {
       allowNull: true
     },
     role: {
-      type: DataTypes.ENUM('super_admin', 'admin', 'member'),
-      defaultValue: 'member'
+      type: DataTypes.STRING,
+      defaultValue: 'member',
+      validate: {
+        isIn: [['super_admin', 'admin', 'member']]
+      }
     },
-    // New field for score
+    himpunanId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'Himpunans', // Pastikan ini sesuai dengan nama tabel di database
+        key: 'id'
+      },
+      onUpdate: 'CASCADE',
+      onDelete: 'SET NULL'
+    },
+    isHimpunanAdmin: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    membershipStatus: { 
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: 'inactive' 
+  },
     score: {
       type: DataTypes.INTEGER,
       defaultValue: 0
     },
-    // Admin-related fields incorporated
+    qrCode: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     position: {
       type: DataTypes.STRING,
       allowNull: true
@@ -50,7 +74,15 @@ module.exports = (sequelize) => {
     permissions: {
       type: DataTypes.JSON,
       allowNull: true,
-      defaultValue: {}
+      defaultValue: {
+        canManageUsers: false,
+        canManageHimpunan: false,
+        canCreateTasks: false,
+        canCreateActivities: false,
+        canScanQR: false,
+        canManageAttendance: false,
+        canViewReports: false
+      }
     },
     joinedAt: {
       type: DataTypes.DATE,
@@ -60,7 +92,6 @@ module.exports = (sequelize) => {
       type: DataTypes.DATE,
       allowNull: true
     },
-    // Common fields from both models
     profilePicture: {
       type: DataTypes.STRING,
       allowNull: true
@@ -72,7 +103,6 @@ module.exports = (sequelize) => {
         is: /^[0-9]+$/
       }
     },
-    // Original User fields
     isActive: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
@@ -97,23 +127,50 @@ module.exports = (sequelize) => {
           user.password = await bcrypt.hash(user.password, salt);
         }
       },
+      afterCreate: async (user) => {
+        if (user.himpunanId) {
+          const Himpunan = sequelize.models.Himpunan; // Akses model Himpunan
+          const himpunan = await Himpunan.findByPk(user.himpunanId);
+          if (himpunan) await himpunan.updateTotalMembers();
+        }
+      },
       beforeUpdate: async (user) => {
+        if (user.changed('himpunanId')) {
+          const Himpunan = sequelize.models.Himpunan; // Akses model Himpunan
+          // Update himpunan lama
+          if (user.previous('himpunanId')) {
+            const oldHimpunan = await Himpunan.findByPk(user.previous('himpunanId'));
+            if (oldHimpunan) await oldHimpunan.updateTotalMembers();
+          }
+
+          // Update himpunan baru
+          if (user.himpunanId) {
+            const newHimpunan = await Himpunan.findByPk(user.himpunanId);
+            if (newHimpunan) await newHimpunan.updateTotalMembers();
+          }
+        }
+
         if (user.changed('password')) {
           const salt = await bcrypt.genSalt(10);
           user.password = await bcrypt.hash(user.password, salt);
         }
+      },
+      afterDestroy: async (user) => {
+        if (user.himpunanId) {
+          const Himpunan = sequelize.models.Himpunan; // Akses model Himpunan
+          const himpunan = await Himpunan.findByPk(user.himpunanId);
+          if (himpunan) await himpunan.updateTotalMembers();
+        }
       }
     },
-    indexes: [
-      {
-        unique: true,
-        fields: ['email']
-      }
-    ]
+    indexes: [{
+      unique: true,
+      fields: ['email']
+    }]
   });
 
   // Method untuk validasi password
-  User.prototype.validPassword = async function(password) {
+  User.prototype.validPassword = async function (password) {
     return await bcrypt.compare(password, this.password);
   };
 

@@ -44,16 +44,16 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-sequelize.sync({ force: false })
-  .then(() => {
-    console.log('Database re-synchronized successfully!');
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  })
-  .catch(err => {
-    console.error('Error synchronizing database:', err);
-  });
+// sequelize.sync({ force: false })
+//   .then(() => {
+//     console.log('Database re-synchronized successfully!');
+//     app.listen(PORT, () => {
+//       console.log(`Server running on port ${PORT}`);
+//     });
+//   })
+//   .catch(err => {
+//     console.error('Error synchronizing database:', err);
+//   });
 
 // Start the server
 startServer();

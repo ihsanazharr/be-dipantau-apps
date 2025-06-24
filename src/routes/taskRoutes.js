@@ -1,32 +1,20 @@
-// src/routes/taskRoutes.js
 const express = require('express');
-const router = express.Router({ mergeParams: true });
-const taskController = require('../controllers/taskController'); // IMPORT CONTROLLER YANG BENAR
+const router = express.Router();
+const taskController = require('../controllers/taskController');
 const { auth, authorize } = require('../middleware/authMiddleware');
 
-// HAPUS DUMMY CONTROLLER INI:
-// const taskController = {
-//   getAllTasks: (req, res) => { ... },
-//   ...
-// };
-
-// Protect all routes
 router.use(auth);
 
-// Get all tasks - admin only
-router.get('/', authorize('super_admin', 'admin'), taskController.getAllTasks);
+// Ganti getCurrentUserTasks dengan getUserTasks
+router.get('/user/me', taskController.getUserTasks);
+router.post('/:id/take', taskController.takeTask);
+router.patch('/:id/complete', taskController.completeTask);
 
-// Get tasks for specific himpunan
-router.get('/himpunan/:himpunanId', taskController.getHimpunanTasks);
+router.use(authorize('super_admin', 'admin'));
 
-// Get current user tasks
-router.get('/user', taskController.getCurrentUserTasks);
-// Get specific user tasks
-router.get('/user/:userId', taskController.getUserTasks);
-
-// CRUD operations for tasks
-router.post('/', authorize('super_admin', 'admin'), taskController.createTask);
+router.get('/', taskController.getAllTasks);
 router.get('/:id', taskController.getTask);
+router.post('/', taskController.createTask);
 router.put('/:id', taskController.updateTask);
 router.delete('/:id', taskController.deleteTask);
 

@@ -1,16 +1,21 @@
-const { Notification, User } = require('../models');
-const { Op } = require('sequelize');
+const {
+  Notification,
+  User
+} = require('../models');
+const {
+  Op
+} = require('sequelize');
 
 // @desc    Create a new notification
 // @route   POST /api/notifications
 exports.createNotification = async (req, res) => {
   try {
-    const { 
-      title, 
-      content, 
-      type, 
-      recipientId, 
-      priority 
+    const {
+      title,
+      content,
+      type,
+      recipientId,
+      priority
     } = req.body;
 
     const senderId = req.user.id;
@@ -62,26 +67,31 @@ exports.getMyNotifications = async (req, res) => {
     const type = req.query.type;
 
     // Build where clause
-    const whereClause = { recipientId: userId };
-    
+    const whereClause = {
+      recipientId: userId
+    };
+
     if (isRead !== undefined) {
       whereClause.isRead = isRead === 'true';
     }
-    
+
     if (type) {
       whereClause.type = type;
     }
 
-    const { count, rows } = await Notification.findAndCountAll({
+    const {
+      count,
+      rows
+    } = await Notification.findAndCountAll({
       where: whereClause,
-      include: [
-        {
-          model: User,
-          as: 'sender',
-          attributes: ['id', 'fullName', 'email', 'profilePicture']
-        }
+      include: [{
+        model: User,
+        as: 'sender',
+        attributes: ['id', 'fullName', 'email', 'profilePicture']
+      }],
+      order: [
+        ['createdAt', 'DESC']
       ],
-      order: [['createdAt', 'DESC']],
       limit,
       offset
     });
@@ -108,8 +118,7 @@ exports.getMyNotifications = async (req, res) => {
 exports.getNotificationById = async (req, res) => {
   try {
     const notification = await Notification.findByPk(req.params.id, {
-      include: [
-        {
+      include: [{
           model: User,
           as: 'sender',
           attributes: ['id', 'fullName', 'email', 'profilePicture']
@@ -130,9 +139,9 @@ exports.getNotificationById = async (req, res) => {
     }
 
     // Check if user is the recipient or the sender or super_admin
-    if (notification.recipientId !== req.user.id && 
-        notification.senderId !== req.user.id && 
-        req.user.role !== 'super_admin') {
+    if (notification.recipientId !== req.user.id &&
+      notification.senderId !== req.user.id &&
+      req.user.role !== 'super_admin') {
       return res.status(403).json({
         success: false,
         message: 'You are not authorized to view this notification'
@@ -200,15 +209,14 @@ exports.markAllNotificationsAsRead = async (req, res) => {
     const userId = req.user.id;
 
     // Update all unread notifications for user
-    await Notification.update(
-      { isRead: true },
-      { 
-        where: { 
-          recipientId: userId,
-          isRead: false
-        } 
+    await Notification.update({
+      isRead: true
+    }, {
+      where: {
+        recipientId: userId,
+        isRead: false
       }
-    );
+    });
 
     res.status(200).json({
       success: true,
@@ -238,9 +246,9 @@ exports.deleteNotification = async (req, res) => {
     }
 
     // Check if user is the recipient or the sender or super_admin
-    if (notification.recipientId !== req.user.id && 
-        notification.senderId !== req.user.id && 
-        req.user.role !== 'super_admin') {
+    if (notification.recipientId !== req.user.id &&
+      notification.senderId !== req.user.id &&
+      req.user.role !== 'super_admin') {
       return res.status(403).json({
         success: false,
         message: 'You are not authorized to delete this notification'
@@ -270,7 +278,7 @@ exports.getUnreadNotificationsCount = async (req, res) => {
     const userId = req.user.id;
 
     const count = await Notification.count({
-      where: { 
+      where: {
         recipientId: userId,
         isRead: false
       }
@@ -294,8 +302,15 @@ exports.getUnreadNotificationsCount = async (req, res) => {
 // @access  Private/Admin
 exports.sendHimpunanNotification = async (req, res) => {
   try {
-    const { himpunanId } = req.params;
-    const { title, content, type, priority } = req.body;
+    const {
+      himpunanId
+    } = req.params;
+    const {
+      title,
+      content,
+      type,
+      priority
+    } = req.body;
     const senderId = req.user.id;
 
     // Check if himpunan exists
@@ -317,7 +332,7 @@ exports.sendHimpunanNotification = async (req, res) => {
 
     // Get all active members
     const members = await HimpunanMember.findAll({
-      where: { 
+      where: {
         himpunanId,
         status: 'active'
       },
@@ -333,7 +348,7 @@ exports.sendHimpunanNotification = async (req, res) => {
 
     // Create notifications for each member
     const notifications = await Promise.all(
-      members.map(member => 
+      members.map(member =>
         Notification.create({
           title,
           content,
@@ -356,6 +371,56 @@ exports.sendHimpunanNotification = async (req, res) => {
       success: false,
       message: 'Failed to send notifications',
       error: error.message
+    });
+  }
+};
+
+// Fungsi baru untuk mendapatkan notifikasi spesifik user
+exports.getMyNotificationById = async (req, res) => {
+  try {
+    const notification = await Notification.findOne({
+      where: {
+        id: req.params.id,
+        recipientId: req.user.id
+      }
+    });
+
+    if (!notification) {
+      return res.status(404).json({
+        message: 'Notification not found'
+      });
+    }
+
+    res.json(notification);
+  } catch (error) {
+    res.status(500).json({
+      message: 'Server error'
+    });
+  }
+};
+
+// Fungsi baru untuk menghapus notifikasi user
+exports.deleteMyNotification = async (req, res) => {
+  try {
+    const result = await Notification.destroy({
+      where: {
+        id: req.params.id,
+        recipientId: req.user.id
+      }
+    });
+
+    if (result === 0) {
+      return res.status(404).json({
+        message: 'Notification not found'
+      });
+    }
+
+    res.json({
+      message: 'Notification deleted'
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: 'Server error'
     });
   }
 };

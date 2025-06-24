@@ -1,85 +1,84 @@
-const { Attendance, Activity, User, Himpunan, HimpunanMember } = require('../models');
-const { Op } = require('sequelize');
+const {
+  Attendance,
+  Activity,
+  User,
+  Himpunan,
+  HimpunanMember
+} = require('../models');
+const {
+  Op
+} = require('sequelize');
+const QRCode = require('qrcode'); // Pastikan QRCode sudah di-import
 
 // @desc    Record attendance (check-in)
 // @route   POST /api/attendances/check-in
 exports.checkInAttendance = async (req, res) => {
-  try {
-    const { activityId, qrCode, location } = req.body;
-    const userId = req.user.id;
 
+  try {
+
+    const {
+      activityId,
+      qrCode,
+      location
+    } = req.body;
+    const userId = req.user.id;
+    // Aktivitas harus dalam status sesuai
     const activity = await Activity.findOne({
-      where: { 
+      where: {
         id: activityId,
         qrCode,
-        status: { [Op.in]: ['dijadwalkan', 'berlangsung'] }
-      },
-      include: [
-        {
-          model: Himpunan,
-          as: 'himpunan'
+        status: {
+          [Op.in]: ['dijadwalkan', 'berlangsung']
         }
-      ]
+      }
     });
-
     if (!activity) {
       return res.status(404).json({
         success: false,
-        message: 'Activity not found or QR code invalid'
+        message: 'Invalid QR Code or activity'
       });
     }
-
-    const isMember = await HimpunanMember.findOne({
-      where: {
-        userId,
-        himpunanId: activity.himpunanId,
-        status: 'active'
-      }
-    });
-
-    if (!isMember && req.user.role !== 'super_admin' && activity.himpunan.adminId !== userId) {
+    // Validasi keanggotaan himpunan
+    if (req.user.himpunanId !== activity.himpunanId && req.user.role !== 'super_admin') {
       return res.status(403).json({
         success: false,
-        message: 'You are not a member of this himpunan'
+        message: 'Not a member of this himpunan'
       });
     }
-
-    const existingAttendance = await Attendance.findOne({
-      where: { 
-        userId,
-        activityId
+    // Cek apakah sudah absen
+    const existing = await Attendance.findOne({
+      where: {
+        activityId,
+        userId
       }
     });
-
-    if (existingAttendance) {
+    if (existing) {
       return res.status(400).json({
         success: false,
-        message: 'You have already recorded your attendance for this activity'
+        message: 'Already attended'
       });
     }
-
+    // Buat catatan absensi
     const now = new Date();
     const startTime = new Date(activity.startDateTime);
     const status = now > startTime ? 'terlambat' : 'hadir';
-
     const attendance = await Attendance.create({
-      userId,
       activityId,
+      userId,
       checkInTime: now,
-      status,
-      location: location || null
+      location,
+      status
     });
-
     res.status(201).json({
       success: true,
-      message: 'Attendance recorded successfully',
+      message: 'Attendance recorded',
       data: attendance
     });
   } catch (error) {
+
     res.status(500).json({
       success: false,
-      message: 'Failed to record attendance',
-      error: error.message
+      message: 'Server error'
     });
   }
 };
@@ -89,12 +88,15 @@ exports.checkInAttendance = async (req, res) => {
 // @access  Private
 exports.checkOutAttendance = async (req, res) => {
   try {
-    const { activityId, location } = req.body;
+    const {
+      activityId,
+      location
+    } = req.body;
     const userId = req.user.id;
 
     // Find attendance record
     const attendance = await Attendance.findOne({
-      where: { 
+      where: {
         userId,
         activityId,
         checkOutTime: null
@@ -111,7 +113,7 @@ exports.checkOutAttendance = async (req, res) => {
     // Update checkout time
     attendance.checkOutTime = new Date();
     if (location) attendance.location = location;
-    
+
     await attendance.save();
 
     res.status(200).json({
@@ -133,20 +135,20 @@ exports.checkOutAttendance = async (req, res) => {
 // @access  Private/Admin
 exports.getActivityAttendances = async (req, res) => {
   try {
-    const { activityId } = req.params;
+    const {
+      activityId
+    } = req.params;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
     const status = req.query.status || 'all';
-    
+
     // Find activity
     const activity = await Activity.findByPk(activityId, {
-      include: [
-        {
-          model: Himpunan,
-          as: 'himpunan'
-        }
-      ]
+      include: [{
+        model: Himpunan,
+        as: 'himpunan'
+      }]
     });
 
     if (!activity) {
@@ -165,21 +167,26 @@ exports.getActivityAttendances = async (req, res) => {
     }
 
     // Build where clause
-    const whereClause = { activityId };
+    const whereClause = {
+      activityId
+    };
     if (status && status !== 'all') {
       whereClause.status = status;
     }
 
-    const { count, rows } = await Attendance.findAndCountAll({
+    const {
+      count,
+      rows
+    } = await Attendance.findAndCountAll({
       where: whereClause,
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'fullName', 'email', 'profilePicture']
-        }
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['id', 'fullName', 'email', 'profilePicture']
+      }],
+      order: [
+        ['checkInTime', 'DESC']
       ],
-      order: [['checkInTime', 'DESC']],
       limit,
       offset
     });
@@ -206,8 +213,7 @@ exports.getActivityAttendances = async (req, res) => {
 exports.getAttendanceById = async (req, res) => {
   try {
     const attendance = await Attendance.findByPk(req.params.id, {
-      include: [
-        {
+      include: [{
           model: User,
           as: 'user',
           attributes: ['id', 'fullName', 'email', 'profilePicture']
@@ -215,12 +221,10 @@ exports.getAttendanceById = async (req, res) => {
         {
           model: Activity,
           as: 'activity',
-          include: [
-            {
-              model: Himpunan,
-              as: 'himpunan'
-            }
-          ]
+          include: [{
+            model: Himpunan,
+            as: 'himpunan'
+          }]
         }
       ]
     });
@@ -233,9 +237,9 @@ exports.getAttendanceById = async (req, res) => {
     }
 
     // Check if user is admin of this himpunan or super_admin or the user
-    if (attendance.activity.himpunan.adminId !== req.user.id && 
-        req.user.role !== 'super_admin' && 
-        attendance.userId !== req.user.id) {
+    if (attendance.activity.himpunan.adminId !== req.user.id &&
+      req.user.role !== 'super_admin' &&
+      attendance.userId !== req.user.id) {
       return res.status(403).json({
         success: false,
         message: 'You are not authorized to view this attendance record'
@@ -260,21 +264,20 @@ exports.getAttendanceById = async (req, res) => {
 // @access  Private/Admin
 exports.updateAttendance = async (req, res) => {
   try {
-    const { status, notes } = req.body;
+    const {
+      status,
+      notes
+    } = req.body;
 
     const attendance = await Attendance.findByPk(req.params.id, {
-      include: [
-        {
-          model: Activity,
-          as: 'activity',
-          include: [
-            {
-              model: Himpunan,
-              as: 'himpunan'
-            }
-          ]
-        }
-      ]
+      include: [{
+        model: Activity,
+        as: 'activity',
+        include: [{
+          model: Himpunan,
+          as: 'himpunan'
+        }]
+      }]
     });
 
     if (!attendance) {
@@ -318,18 +321,14 @@ exports.updateAttendance = async (req, res) => {
 exports.deleteAttendance = async (req, res) => {
   try {
     const attendance = await Attendance.findByPk(req.params.id, {
-      include: [
-        {
-          model: Activity,
-          as: 'activity',
-          include: [
-            {
-              model: Himpunan,
-              as: 'himpunan'
-            }
-          ]
-        }
-      ]
+      include: [{
+        model: Activity,
+        as: 'activity',
+        include: [{
+          model: Himpunan,
+          as: 'himpunan'
+        }]
+      }]
     });
 
     if (!attendance) {
@@ -374,30 +373,33 @@ exports.getMyAttendances = async (req, res) => {
     const himpunanId = req.query.himpunanId;
 
     // Build where clause
-    const whereClause = { userId };
+    const whereClause = {
+      userId
+    };
     let activityWhereClause = {};
-    
+
     if (himpunanId) {
       activityWhereClause.himpunanId = himpunanId;
     }
 
-    const { count, rows } = await Attendance.findAndCountAll({
+    const {
+      count,
+      rows
+    } = await Attendance.findAndCountAll({
       where: whereClause,
-      include: [
-        {
-          model: Activity,
-          as: 'activity',
-          where: activityWhereClause,
-          include: [
-            {
-              model: Himpunan,
-              as: 'himpunan',
-              attributes: ['id', 'name', 'logo']
-            }
-          ]
-        }
+      include: [{
+        model: Activity,
+        as: 'activity',
+        where: activityWhereClause,
+        include: [{
+          model: Himpunan,
+          as: 'himpunan',
+          attributes: ['id', 'name', 'logo']
+        }]
+      }],
+      order: [
+        ['checkInTime', 'DESC']
       ],
-      order: [['checkInTime', 'DESC']],
       limit,
       offset
     });

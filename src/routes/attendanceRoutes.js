@@ -4,11 +4,17 @@ const router = express.Router();
 const attendanceController = require('../controllers/attendanceController');
 const { auth, authorize } = require('../middleware/authMiddleware');
 
-router.post('/check-in', auth, attendanceController.checkInAttendance);
-router.put('/check-out', auth, attendanceController.checkOutAttendance);
-router.get('/:id', auth, attendanceController.getAttendanceById);
+router.use(auth);
 
-router.put('/:id', auth, authorize('super_admin', 'admin'), attendanceController.updateAttendance);
-router.delete('/:id', auth, authorize('super_admin', 'admin'), attendanceController.deleteAttendance);
+router.post('/check-in', attendanceController.checkInAttendance);
+router.post('/check-out', attendanceController.checkOutAttendance);
+router.get('/user/me', attendanceController.getMyAttendances);
+router.get('/activity/:activityId', attendanceController.getActivityAttendances);
+router.get('/:id', attendanceController.getAttendanceById);
+
+router.use(authorize('super_admin', 'admin'));
+
+router.put('/:id', attendanceController.updateAttendance);
+router.delete('/:id', attendanceController.deleteAttendance);
 
 module.exports = router;

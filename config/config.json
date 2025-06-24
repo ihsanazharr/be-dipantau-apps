@@ -1,9 +1,8 @@
-
 {
   "development": {
     "username": "postgres",
-    "password": null,
-    "database": "dipantau_dev",
+    "password": "123",
+    "database": "dipantau_db",
     "host": "127.0.0.1",
     "port": 5432,
     "dialect": "postgres",
@@ -17,7 +16,7 @@
   },
   "test": {
     "username": "postgres",
-    "password": null,
+    "password": "123",
     "database": "dipantau_test",
     "host": "127.0.0.1",
     "port": 5432,
@@ -26,7 +25,7 @@
   },
   "production": {
     "username": "postgres",
-    "password": null,
+    "password": "123",
     "database": "dipantau_prod",
     "host": "127.0.0.1",
     "port": 5432,

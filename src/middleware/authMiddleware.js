@@ -1,71 +1,60 @@
-// src/middleware/auth.js
 const jwt = require('jsonwebtoken');
-const { User } = require('../models');
-require('dotenv').config();
-
+const { User, Himpunan } = require('../models');
 const auth = async (req, res, next) => {
   try {
-    // Check for token in headers
     const token = req.header('Authorization')?.replace('Bearer ', '');
-    
-    if (!token) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'No authentication token, access denied' 
-      });
-    }
-
-    // Verify token
+    if (!token) throw new Error('Missing token');
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Find user
-    const user = await User.findByPk(decoded.id);
-    
-    if (!user) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'User not found' 
-      });
-    }
-
-    if (!user.isActive) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'User account is inactive' 
-      });
-    }
-
-    // Set user info to request object
+    const user = await User.findByPk(decoded.id, {
+      include: [{
+        model: Himpunan,
+        as: 'himpunan'
+      }]
+    });
+    if (!user || !user.isActive) throw new Error('Invalid user');
     req.user = user;
-    req.token = token;
-    
     next();
   } catch (error) {
-    return res.status(401).json({ 
+    res.status(401).json({ 
       success: false, 
-      message: 'Invalid authentication token' 
+      message: 'Authentication failed: ' + error.message 
     });
   }
 };
 
-const authorize = (...roles) => {
-  return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ 
+const authorize = (roles = []) => {
+  if (typeof roles === 'string') roles = [roles];
+  
+  return async (req, res, next) => {
+    try {
+      // Super admin always passes
+      if (req.user.role === 'super_admin') return next();
+      
+      // Role-based authorization
+      if (roles.length > 0 && !roles.includes(req.user.role)) {
+        throw new Error('Insufficient permissions');
+      }
+      
+      // Himpunan admin authorization
+      if (req.params.himpunanId) {
+        const isAdmin = await User.findOne({
+          where: {
+            id: req.user.id,
+            himpunanId: req.params.himpunanId,
+            isHimpunanAdmin: true
+          }
+        });
+
+        if (!isAdmin) throw new Error('Not himpunan admin');
+      }
+      
+      next();
+    } catch (error) {
+      res.status(403).json({ 
         success: false, 
-        message: 'Please login first' 
+        message: 'Authorization failed: ' + error.message 
       });
     }
-
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'You do not have permission to perform this action' 
-      });
-    }
-
-    next();
   };
 };
-
 module.exports = { auth, authorize };

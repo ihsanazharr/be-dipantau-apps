@@ -1,44 +1,34 @@
 const express = require('express');
+const router = express.Router();
 const adminController = require('../controllers/adminController');
-// Ubah import middleware sesuai dengan yang sudah Anda buat sebelumnya
 const { auth, authorize } = require('../middleware/authMiddleware');
 
-const router = express.Router();
-
-// Protect all routes - gunakan middleware auth yang sudah ada
 router.use(auth);
-
-// Admin & Super Admin routes - gunakan middleware authorize yang sudah ada
-router.use(authorize('admin', 'super_admin'));
-
-router.route('/')
-  .get(adminController.getAllAdmins)
-  .post(authorize('super_admin'), adminController.createAdmin);
-
-router.route('/:id')
-  .get(adminController.getAdmin)
-  .put(adminController.updateAdmin)
-  .delete(authorize('super_admin'), adminController.deleteAdmin);
+router.use(authorize('super_admin')); // Hanya super_admin yang bisa akses
+router.get('/', adminController.getAllAdmins);
+router.post('/', adminController.createAdmin);
+router.get('/:id', adminController.getAdmin);
+router.put('/:id', adminController.updateAdmin);
+router.delete('/:id', adminController.deleteAdmin);
 
 // Admin roles & permissions
 router.get('/roles', adminController.getAdminRoles);
-
-// Perbaiki baris ini - pastikan adminController.createAdminRole adalah fungsi
-// Pastikan fungsi ini didefinisikan di adminController.js
-router.route('/roles')
-  .post(authorize('super_admin'), adminController.createAdminRole);
-
-router.route('/roles/:id')
-  .put(authorize('super_admin'), adminController.updateAdminRole)
-  .delete(authorize('super_admin'), adminController.deleteAdminRole);
+router.post('/roles', adminController.createAdminRole);
+router.put('/roles/:id', adminController.updateAdminRole);
+router.delete('/roles/:id', adminController.deleteAdminRole);
 
 // Admin logs
 router.get('/logs', adminController.getAdminLogs);
 router.get('/logs/:adminId', adminController.getAdminLogsByAdmin);
 
-// Admin settings
-router.post('/reset-password/:id', authorize('super_admin'), adminController.resetAdminPassword);
-router.post('/activate/:id', authorize('super_admin'), adminController.activateAdmin);
-router.post('/deactivate/:id', authorize('super_admin'), adminController.deactivateAdmin);
+// Admin management
+router.post('/reset-password/:id', adminController.resetAdminPassword);
+router.post('/activate/:id', adminController.activateAdmin);
+router.post('/deactivate/:id', adminController.deactivateAdmin);
+
+// Di bawah route admin yang sudah ada
+router.post('/assign-himpunan', auth, authorize('super_admin'),
+  adminController.assignHimpunanToAdmin
+);
 
 module.exports = router;

@@ -1,23 +1,46 @@
 // src/controllers/authController.js
 const jwt = require('jsonwebtoken');
-const { User } = require('../models');
+const {
+  User
+} = require('../models');
 const crypto = require('crypto');
 
 // Generate JWT Token
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+  return jwt.sign({
+    id
+  }, process.env.JWT_SECRET, {
     expiresIn: '30d',
   });
 };
 
+exports.refreshToken = async (req, res) => {
+  const {
+    refreshToken
+  } = req.body;
+  // Verifikasi refresh token
+  // Generate new access token
+};
+
 exports.register = async (req, res) => {
   try {
-    const { username, email, password, role } = req.body;
+    const {
+      username,
+      email,
+      password,
+      role
+    } = req.body;
 
     // Cek apakah user sudah ada
-    const userExists = await User.findOne({ where: { email } });
+    const userExists = await User.findOne({
+      where: {
+        email
+      }
+    });
     if (userExists) {
-      return res.status(400).json({ message: 'Pengguna sudah terdaftar' });
+      return res.status(400).json({
+        message: 'Pengguna sudah terdaftar'
+      });
     }
 
     // Buat user baru
@@ -39,24 +62,33 @@ exports.register = async (req, res) => {
       token
     });
   } catch (error) {
-    res.status(400).json({ 
+    res.status(400).json({
       message: 'Gagal mendaftar',
-      error: error.message 
+      error: error.message
     });
   }
 };
 
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const {
+      email,
+      password
+    } = req.body;
 
     // Cari user berdasarkan email
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({
+      where: {
+        email
+      }
+    });
 
     // Periksa user dan password
     if (user && (await user.validPassword(password))) {
       // Update last login
-      await user.update({ lastLogin: new Date() });
+      await user.update({
+        lastLogin: new Date()
+      });
 
       res.json({
         id: user.id,
@@ -68,12 +100,14 @@ exports.login = async (req, res) => {
 
       console.log('Authenticated user:', user.id, user.email);
     } else {
-      res.status(401).json({ message: 'Email atau password salah' });
+      res.status(401).json({
+        message: 'Email atau password salah'
+      });
     }
   } catch (error) {
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Gagal login',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -90,21 +124,27 @@ exports.getMe = async (req, res) => {
       phoneNumber: req.user.phoneNumber
     });
   } catch (error) {
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Gagal mengambil profil',
-      error: error.message 
+      error: error.message
     });
   }
 };
 
 exports.updateProfile = async (req, res) => {
   try {
-    const { fullName, phoneNumber, profilePicture } = req.body;
-    
+    const {
+      fullName,
+      phoneNumber,
+      profilePicture
+    } = req.body;
+
     const user = await User.findByPk(req.user.id);
-    
+
     if (!user) {
-      return res.status(404).json({ message: 'Pengguna tidak ditemukan' });
+      return res.status(404).json({
+        message: 'Pengguna tidak ditemukan'
+      });
     }
 
     // Update profil
@@ -126,50 +166,67 @@ exports.updateProfile = async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Gagal memperbarui profil',
-      error: error.message 
+      error: error.message
     });
   }
 };
 
 exports.changePassword = async (req, res) => {
   try {
-    const { currentPassword, newPassword } = req.body;
-    
+    const {
+      currentPassword,
+      newPassword
+    } = req.body;
+
     const user = await User.findByPk(req.user.id);
-    
+
     // Periksa password saat ini
     if (!(await user.validPassword(currentPassword))) {
-      return res.status(400).json({ message: 'Password saat ini salah' });
+      return res.status(400).json({
+        message: 'Password saat ini salah'
+      });
     }
 
     // Update password
-    await user.update({ password: newPassword });
+    await user.update({
+      password: newPassword
+    });
 
-    res.status(200).json({ message: 'Password berhasil diperbarui' });
+    res.status(200).json({
+      message: 'Password berhasil diperbarui'
+    });
   } catch (error) {
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Gagal mengubah password',
-      error: error.message 
+      error: error.message
     });
   }
 };
 
 exports.forgotPassword = async (req, res) => {
   try {
-    const { email } = req.body;
-    
+    const {
+      email
+    } = req.body;
+
     // Cari user berdasarkan email
-    const user = await User.findOne({ where: { email } });
-    
+    const user = await User.findOne({
+      where: {
+        email
+      }
+    });
+
     if (!user) {
-      return res.status(404).json({ message: 'Email tidak ditemukan' });
+      return res.status(404).json({
+        message: 'Email tidak ditemukan'
+      });
     }
 
     // Generate reset token
     const resetToken = crypto.randomBytes(20).toString('hex');
-    
+
     // Set token dan waktu kedaluwarsa
     await user.update({
       resetPasswordToken: crypto
@@ -188,9 +245,9 @@ exports.forgotPassword = async (req, res) => {
       resetToken
     });
   } catch (error) {
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Gagal memproses lupa password',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -207,12 +264,16 @@ exports.resetPassword = async (req, res) => {
     const user = await User.findOne({
       where: {
         resetPasswordToken,
-        resetPasswordExpire: { [Op.gt]: Date.now() }
+        resetPasswordExpire: {
+          [Op.gt]: Date.now()
+        }
       }
     });
 
     if (!user) {
-      return res.status(400).json({ message: 'Token reset password tidak valid atau sudah kedaluwarsa' });
+      return res.status(400).json({
+        message: 'Token reset password tidak valid atau sudah kedaluwarsa'
+      });
     }
 
     // Set password baru
@@ -222,24 +283,30 @@ exports.resetPassword = async (req, res) => {
       resetPasswordExpire: null
     });
 
-    res.status(200).json({ message: 'Password berhasil direset' });
+    res.status(200).json({
+      message: 'Password berhasil direset'
+    });
   } catch (error) {
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Gagal mereset password',
-      error: error.message 
+      error: error.message
     });
   }
 };
 
 exports.logout = async (req, res) => {
   try {
-    await req.user.update({ lastLogin: null });
+    await req.user.update({
+      lastLogin: null
+    });
 
-    res.status(200).json({ message: 'Logout berhasil' });
+    res.status(200).json({
+      message: 'Logout berhasil'
+    });
   } catch (error) {
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Gagal logout',
-      error: error.message 
+      error: error.message
     });
   }
 };
